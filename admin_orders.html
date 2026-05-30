@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <meta charset="UTF-8">
+  <title>Admin: Orders with Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+  
+  <style>
+    body {
+      background-color: #eceff1;
+      margin: 0;
+      padding: 0;
+    }
+    .main-container {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 40px auto;
+      max-width: 1200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .badge-pending {
+      background-color: #ffa726;
+      color: #fff;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+    .badge-cancelled {
+      background-color: #ef5350;
+      color: #fff;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+    .badge-shipped {
+      background-color: #29b6f6;
+      color: #fff;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+    .badge-delivered {
+      background-color: #66bb6a;
+      color: #fff;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+    .badge-paid {
+      background-color: #8d6e63;
+      color: #fff;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+<div id="navApp">
+  <nav class="navbar navbar-expand-lg bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand text-light" href="admin_dashboard.html">Admin Dashboard</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link text-light" href="admin_events.html">Events</a></li>
+          <li class="nav-item"><a class="nav-link text-light active" aria-current="page" href="admin_orders.html">Orders</a></li>
+          <li class="nav-item"><a class="nav-link text-light" href="admin_users.html">Users</a></li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link text-light" href="profile.html">Profile</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link text-light" href="#" @click.prevent="logout">Logout ({{ userName }})</a>
+          </li>
+          <li class="nav-item" v-else>
+            <a class="nav-link text-light" href="login.html">Login/Register</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<div id="app" class="mt-3">
+  <div class="main-container">
+    <button class="btn btn-secondary back-btn" @click="goDashboard">← Back to Dashboard</button>
+    <h2>All Orders</h2>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <input type="text" class="form-control" v-model="filters.user" placeholder="User Name/Email">
+      </div>
+      <div class="col-md-3">
+        <input type="date" class="form-control" v-model="filters.date">
+      </div>
+      <div class="col-md-3">
+        <input type="text" class="form-control" v-model="filters.status" placeholder="Status">
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary w-100" @click="fetchOrders">Search</button>
+      </div>
+    </div>
+
+    <div v-if="orders.length > 0" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+      <div class="col d-flex" v-for="ord in orders" :key="ord.id">
+        <div class="card flex-fill">
+          <div class="card-body d-flex flex-column">
+            <h5>Order #{{ ord.id }}</h5>
+            <p class="flex-grow-1">
+              <strong>User:</strong> {{ ord.user_name }} ({{ ord.user_email }})<br>
+              <strong>Date:</strong> {{ new Date(ord.created_at).toLocaleString() }}<br>
+              <strong>Status:</strong>
+              <span :class="statusBadgeClass(ord.status)">
+                {{ ord.status || 'pending' }}
+              </span><br>
+              <strong>Total:</strong> ${{ parseFloat(ord.total_price).toFixed(2) }}
+            </p>
+            <div class="mb-2">
+              <label class="form-label">Change Status:</label>
+              <div class="input-group">
+                <select class="form-select" v-model="ord.newStatus">
+                  <option value="pending">Pending</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="paid">Paid</option>
+                </select>
+                <button class="btn btn-secondary" @click="updateStatus(ord.id, ord.newStatus)">Update</button>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-danger align-self-end" @click="deleteOrder(ord.id)">
+              Delete Order
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="alert alert-info text-center">
+      No orders found.
+    </div>
+
+    <div v-if="message" class="alert mt-3" :class="{'alert-success': success, 'alert-danger': !success}">
+      {{ message }}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+const navApp = Vue.createApp({
+  data() {
+    return {
+      isLoggedIn: false,
+      userName: "",
+      isAdmin: false
+    };
+  },
+  methods: {
+    async checkSession() {
+      try {
+        const resp = await fetch('session_check.php');
+        const j = await resp.json();
+        if (j.success) {
+          this.isLoggedIn = true;
+          this.userName = j.data.name;
+          this.isAdmin = (j.data.role === 'admin');
+        } else {
+          this.isLoggedIn = false;
+          this.isAdmin = false;
+        }
+      } catch (e) {
+        console.error("checkSession error:", e);
+      }
+    },
+    async logout() {
+      try {
+        const resp = await fetch('logout.php');
+        const j = await resp.json();
+        if (j.success) {
+          window.location.href = 'login.html';
+        }
+      } catch (e) {
+        console.error("logout error:", e);
+      }
+    }
+  },
+  mounted() {
+    this.checkSession();
+  }
+});
+navApp.mount('#navApp');
+</script>
+
+<script>
+const adminOrdersApp = Vue.createApp({
+  data() {
+    return {
+      orders: [],
+      filters: {
+        user: '',
+        date: '',
+        status: ''
+      },
+      message: '',
+      success: false
+    };
+  },
+  methods: {
+    async fetchOrders() {
+      const query = new URLSearchParams(this.filters).toString();
+      try {
+        const resp = await fetch('admin_orders.php?' + query);
+        const data = await resp.json();
+        if (data.success) {
+          data.data.forEach(o => {
+            o.newStatus = o.status || 'pending';
+          });
+          this.orders = data.data;
+        } else {
+          this.message = data.message || "Failed to fetch orders.";
+          this.success = false;
+        }
+      } catch (e) {
+        console.error("fetchOrders error:", e);
+        this.message = "Error fetching orders.";
+        this.success = false;
+      }
+    },
+    goDashboard(){
+  window.location.href='admin_dashboard.html';
+},
+    statusBadgeClass(st) {
+      let s = (st || 'pending').toLowerCase();
+      return {
+        'badge-pending':    s === 'pending',
+        'badge-cancelled':  s === 'cancelled',
+        'badge-shipped':    s === 'shipped',
+        'badge-delivered':  s === 'delivered',
+        'badge-paid':       s === 'paid'
+      };
+    },
+    async updateStatus(orderId, newStatus) {
+      if (!confirm(`Update order #${orderId} => ${newStatus}?`)) return;
+      const body = new URLSearchParams({
+        action: 'update_status',
+        order_id: orderId,
+        status: newStatus
+      });
+      try {
+        const resp = await fetch('admin_orders.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body
+        });
+        const r = await resp.json();
+        if (r.success) {
+          this.message = `Order #${orderId} updated to ${newStatus}`;
+          this.success = true;
+          this.fetchOrders();
+        } else {
+          this.message = r.message || "Failed to update order.";
+          this.success = false;
+        }
+      } catch (e) {
+        console.error("updateStatus error:", e);
+        this.message = "Error updating order.";
+        this.success = false;
+      }
+    },
+    async deleteOrder(orderId) {
+      if (!confirm(`Delete order #${orderId}?`)) return;
+      const body = new URLSearchParams({
+        action: 'delete_order',
+        order_id: orderId
+      });
+      try {
+        const resp = await fetch('admin_orders.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body
+        });
+        const r = await resp.json();
+        if (r.success) {
+          this.message = `Order #${orderId} deleted.`;
+          this.success = true;
+          this.fetchOrders();
+        } else {
+          this.message = r.message || "Failed to delete order.";
+          this.success = false;
+        }
+      } catch (e) {
+        console.error("deleteOrder error:", e);
+        this.message = "Error deleting order.";
+        this.success = false;
+      }
+    }
+  },
+  mounted() {
+    this.fetchOrders();
+  }
+});
+adminOrdersApp.mount('#app');
+</script>
+
+</body>
+</html>

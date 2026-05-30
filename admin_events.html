@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <meta charset="UTF-8">
+  <title>Admin: Manage Events</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+  <style>
+    body {
+      background-color: #eceff1; 
+      margin: 0;
+      padding: 0;
+    }
+    .main-container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 40px auto;
+      max-width: 1200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .card-img-top {
+      max-height: 180px; 
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+
+
+<div id="navApp">
+  <nav class="navbar navbar-expand-lg bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand text-light" href="admin_dashboard.html">
+        Admin Dashboard
+      </a>
+      <button class="navbar-toggler text-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link text-light" href="admin_orders.html">Orders</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-light active" aria-current="page" href="admin_events.html">Events</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-light" href="admin_users.html">Users</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link text-light" href="profile.html">Profile</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link text-light" href="#" @click.prevent="logout">Logout ({{ userName }})</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<div id="app" class="mt-3">
+  <div class="main-container">
+    <button class="btn btn-secondary back-btn" @click="goDashboard">← Back to Dashboard</button>
+    <h2>Manage Events</h2>
+    <div class="mb-3 row g-2">
+      <div class="col-md-3">
+        <input type="text" class="form-control" v-model="filters.title" placeholder="Title">
+      </div>
+      <div class="col-md-2">
+        <input type="text" class="form-control" v-model="filters.genre" placeholder="Genre">
+      </div>
+      <div class="col-md-2">
+        <input type="text" class="form-control" v-model="filters.location" placeholder="Location">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" @click="fetchEvents">Search</button>
+      </div>
+      <div class="col-md-3 text-end">
+        <button class="btn btn-success" @click="openAddForm">Add Event</button>
+      </div>
+    </div>
+
+    <div v-if="events.length>0" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+      <div v-for="evt in events" :key="evt.id" class="col d-flex">
+        <div class="card flex-fill d-flex flex-column">
+          <img :src="evt.image_url || 'placeholder.png'" class="card-img-top" :alt="evt.title">
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">{{ evt.title }}</h5>
+            <p class="card-text flex-grow-1">
+              <strong>Location:</strong> {{ evt.location }}<br>
+              <strong>Date:</strong> {{ new Date(evt.date_time).toLocaleDateString() }}<br>
+              <strong>Genre:</strong> {{ evt.genre }}<br>
+              <strong>Price:</strong> ${{ parseFloat(evt.price).toFixed(2) }}
+            </p>
+            <div class="mt-auto">
+              <button class="btn btn-sm btn-warning me-2" @click="openEditForm(evt)">Edit</button>
+              <button class="btn btn-sm btn-danger" @click="deleteEvent(evt.id)">Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="alert alert-warning text-center">
+      No events found.
+    </div>
+
+    <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ editMode? "Edit Event":"Add Event" }}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="saveEvent" enctype="multipart/form-data">
+              <div class="mb-3">
+                <label class="form-label">Title</label>
+                <input type="text" v-model="form.title" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Description</label>
+                <textarea v-model="form.description" class="form-control" required></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Location</label>
+                <input type="text" v-model="form.location" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Date & Time</label>
+                <input type="datetime-local" v-model="form.date_time" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Genre</label>
+                <input type="text" v-model="form.genre" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Price</label>
+                <input type="number" step="0.01" v-model="form.price" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Interpreter</label>
+                <input type="text" v-model="form.artist_name" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Songs (comma-separated)</label>
+                <input type="text" v-model="form.songs" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Image (optional)</label>
+                <input type="file" ref="image" class="form-control" accept=".png,.jpg,.jpeg,.webp">
+              </div>
+              <button type="submit" class="btn btn-primary w-100">
+                {{ editMode ? "Update":"Add" }} Event
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="message" class="alert mt-3" :class="{'alert-success': success, 'alert-danger': !success}">
+      {{ message }}
+    </div>
+  </div>
+</div>
+
+<script 
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+</script>
+<script>
+const navApp = Vue.createApp({
+  data(){
+    return{
+      isLoggedIn:false,
+      userName:"",
+      isAdmin:false
+    };
+  },
+  methods:{
+    async checkSession(){
+      try{
+        const r=await fetch('session_check.php');
+        const j=await r.json();
+        if(j.success){
+          this.isLoggedIn=true;
+          this.userName=j.data.name;
+          this.isAdmin=(j.data.role==='admin');
+        } else {
+          this.isLoggedIn=false; this.isAdmin=false;
+        }
+      }catch(e){console.error(e);}
+    },
+    async logout(){
+      const r=await fetch('logout.php');
+      const j=await r.json();
+      if(j.success){
+        window.location.href='login.html';
+      }
+    }
+  },
+  mounted(){
+    this.checkSession();
+  }
+});
+navApp.mount('#navApp');
+
+const app = Vue.createApp({
+  data(){
+    return {
+      events:[],
+      filters:{ title:'', genre:'', location:''},
+      editMode:false,
+      form:{
+        id:null, title:'', description:'', location:'', date_time:'',
+        genre:'', price:'', artist_name:'', songs:''
+      },
+      message:'',
+      success:false
+    };
+  },
+  methods:{
+    async fetchEvents(){
+      let params=new URLSearchParams(this.filters).toString();
+      const resp=await fetch('admin_events.php?'+params);
+      const j=await resp.json();
+      if(j.success){
+        this.events=j.data;
+      } else {
+        this.message=j.message||"Failed to fetch events";
+        this.success=false;
+      }
+    },
+    goDashboard(){
+  window.location.href='admin_dashboard.html';
+},
+    openAddForm(){
+      this.editMode=false;
+      this.form={
+        id:null, title:'', description:'', location:'', date_time:'',
+        genre:'', price:'', artist_name:'', songs:''
+      };
+      let mm=new bootstrap.Modal(document.getElementById('eventModal'));
+      mm.show();
+    },
+    openEditForm(evt){
+      this.editMode=true;
+      this.form={
+        id:evt.id,
+        title:evt.title,
+        description:evt.description,
+        location:evt.location,
+        date_time:evt.date_time.slice(0,16), 
+        genre:evt.genre,
+        price:evt.price,
+        artist_name:evt.artist_name||'',
+        songs:evt.songs||''
+      };
+      let mm=new bootstrap.Modal(document.getElementById('eventModal'));
+      mm.show();
+    },
+    async saveEvent(){
+      const formData=new FormData();
+      formData.append('action', this.editMode?'edit':'add');
+      if(this.form.id) formData.append('id',this.form.id);
+      formData.append('title',this.form.title);
+      formData.append('description',this.form.description);
+      formData.append('location',this.form.location);
+      formData.append('date_time',this.form.date_time);
+      formData.append('genre',this.form.genre);
+      formData.append('price',this.form.price);
+      formData.append('artist_name',this.form.artist_name);
+      formData.append('songs',this.form.songs);
+      if(this.$refs.image && this.$refs.image.files && this.$refs.image.files[0]){
+        formData.append('image', this.$refs.image.files[0]);
+      }
+
+      try{
+        const r=await fetch('admin_events.php',{
+          method:'POST',
+          body:formData
+        });
+        const j=await r.json();
+        if(j.success){
+          this.message=j.message;
+          this.success=true;
+          let mm=bootstrap.Modal.getInstance(document.getElementById('eventModal'));
+          mm.hide();
+          this.fetchEvents();
+        } else {
+          this.message=j.message||"Failed to save event";
+          this.success=false;
+        }
+      }catch(e){
+        console.error(e);
+        this.message="Error saving event.";
+        this.success=false;
+      }
+    },
+    async deleteEvent(eid){
+      if(!confirm("Delete event #"+eid+" ?")) return;
+      const resp=await fetch('admin_events.php',{
+        method:'DELETE',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'id='+eid
+      });
+      const j=await resp.json();
+      if(j.success){
+        this.message="Event deleted.";
+        this.success=true;
+        this.fetchEvents();
+      } else {
+        this.message=j.message||"Failed to delete event.";
+        this.success=false;
+      }
+    }
+  },
+  mounted(){
+    this.fetchEvents();
+  }
+});
+app.mount('#app');
+</script>
+
+</body>
+</html>

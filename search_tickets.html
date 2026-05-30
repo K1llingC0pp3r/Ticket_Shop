@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <meta charset="UTF-8">
+  <title>Search Tickets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+
+  <style>
+    body {
+      background-color: #f2f2f2;
+      margin: 0;
+      padding: 0;
+    }
+    .main-container {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 40px auto;
+      max-width: 1200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .card {
+      border: none;
+      border-radius: 6px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    .card-img-top {
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      height: 200px;
+      object-fit: cover;
+    }
+    .modal-body img {
+      max-width: 100%;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="navApp">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="index.html">TicketShop</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="index.html">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="search_tickets.html">Browse Events</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="shopping_cart.html">Cart</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="order_history.html">My Orders</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="profile.html">Profile</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="#" @click.prevent="logout">Logout ({{ userName }})</a>
+          </li>
+          <li class="nav-item" v-else>
+            <a class="nav-link" href="login.html">Login/Register</a>
+          </li>
+          <li class="nav-item" v-if="isAdmin">
+            <a class="nav-link" href="admin_dashboard.html">Admin Dashboard</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</div>
+<div id="searchApp">
+  <div class="main-container">
+    <h2>Find Your Tickets</h2>
+    
+    <div class="row g-2 mb-4">
+      <div class="col-md-3">
+        <input type="text" class="form-control" v-model="filters.title" placeholder="Search by Title">
+      </div>
+      <div class="col-md-2">
+        <input type="text" class="form-control" v-model="filters.genre" placeholder="Genre">
+      </div>
+      <div class="col-md-2">
+        <input type="text" class="form-control" v-model="filters.location" placeholder="Location">
+      </div>
+      <div class="col-md-2">
+        <input type="number" class="form-control" v-model="filters.minPrice" placeholder="Min Price">
+      </div>
+      <div class="col-md-2">
+        <input type="number" class="form-control" v-model="filters.maxPrice" placeholder="Max Price">
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-primary w-100" @click="searchTickets">Search</button>
+      </div>
+    </div>
+
+    <div v-if="tickets.length>0" class="row row-cols-1 row-cols-md-3 g-4">
+      <div v-for="ticket in tickets" :key="ticket.id" class="col">
+        <div class="card h-100 d-flex flex-column">
+          <img 
+            :src="ticket.image_url || 'placeholder.png'"
+            class="card-img-top"
+            :alt="ticket.title"
+          >
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">{{ ticket.title }}</h5>
+            <p class="card-text">
+              <strong>Location:</strong> {{ ticket.location }}<br>
+              <strong>Date:</strong> {{ new Date(ticket.date_time).toLocaleDateString() }}<br>
+              <strong>Genre:</strong> {{ ticket.genre }}<br>
+              <strong>Price:</strong> ${{ parseFloat(ticket.price).toFixed(2) }}
+            </p>
+            <div class="mt-auto">
+              <button class="btn btn-primary w-100" @click="addToCart(ticket.id)">Add to Cart</button>
+              <button class="btn btn-outline-secondary w-100 mt-2" @click="showDetails(ticket)">Details</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="alert alert-warning text-center">
+      No tickets found. Try adjusting your search filters.
+    </div>
+
+    <div 
+      class="modal fade"
+      id="detailModal"
+      tabindex="-1"
+      aria-labelledby="detailModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header" v-if="modalEvent && modalEvent.title">
+            <h5 class="modal-title" id="detailModalLabel">{{ modalEvent.title }}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-header" v-else>
+            <h5 class="modal-title">Loading event details...</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+
+          <div class="modal-body" v-if="modalEvent && modalEvent.title">
+            <img 
+              :src="modalEvent.image_url || 'placeholder.png'" 
+              class="img-fluid mb-3" 
+              :alt="modalEvent.title"
+            >
+            <p>
+              <strong>Date & Time:</strong> {{ new Date(modalEvent.date_time).toLocaleString() }}<br>
+              <strong>Location:</strong> {{ modalEvent.location }}<br>
+              <strong>Genre:</strong> {{ modalEvent.genre }}<br>
+              <strong>Price:</strong> ${{ parseFloat(modalEvent.price).toFixed(2) }}
+            </p>
+            <p><strong>Description:</strong> {{ modalEvent.description }}</p>
+            <p><strong>Interpreter:</strong> {{ modalInterpreter }}</p>
+            <ul>
+              <li v-for="(s,idx) in topSongs" :key="idx">{{ s.trim() }}</li>
+            </ul>
+          </div>
+          <div class="modal-footer" v-if="modalEvent && modalEvent.id">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button class="btn btn-primary" @click="addToCart(modalEvent.id)">Add to Cart</button>
+          </div>
+          <div class="modal-footer" v-else>
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div> 
+</div> 
+
+<footer class="bg-dark text-light py-3 mt-5">
+  <div class="container text-center">
+    <p class="mb-0">&copy; 2025 TicketShop. All rights reserved.</p>
+    <small>
+      <a href="#" class="text-light">Contact</a> | 
+      <a href="#" class="text-light">About</a>
+    </small>
+  </div>
+</footer>
+
+<script 
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+</script>
+
+<script>
+  const navApp = Vue.createApp({
+    data(){
+      return {
+        isLoggedIn:false,
+        userName:"",
+        isAdmin:false
+      };
+    },
+    methods:{
+      async checkSession(){
+        try{
+          const resp=await fetch('session_check.php');
+          const j=await resp.json();
+          if(j.success){
+            this.isLoggedIn=true;
+            this.userName=j.data.name;
+            this.isAdmin=(j.data.role==='admin');
+          } else {
+            this.isLoggedIn=false;
+            this.isAdmin=false;
+          }
+        }catch(e){
+          console.error(e);
+        }
+      },
+      async logout(){
+        try{
+          const r=await fetch('logout.php');
+          const j=await r.json();
+          if(j.success){
+            window.location.href='login.html';
+          }
+        }catch(e){
+          console.error(e);
+        }
+      }
+    },
+    mounted(){
+      this.checkSession();
+    }
+  });
+  navApp.mount('#navApp');
+</script>
+
+<script>
+  const searchApp = Vue.createApp({
+    data(){
+      return {
+        tickets: [],
+        filters:{
+          title:'',
+          genre:'',
+          location:'',
+          minPrice:'',
+          maxPrice:''
+        },
+        modalEvent:null,
+        modalInterpreter:'Unknown Artist',
+        topSongs:[]
+      };
+    },
+    methods:{
+      async searchTickets(){
+        try{
+          const params = new URLSearchParams(this.filters).toString();
+          const response = await fetch('search_tickets.php?'+params);
+          const result=await response.json();
+          if(result.success){
+            this.tickets=result.data;
+          } else {
+            alert(result.message || "Failed to fetch tickets.");
+          }
+        } catch(e){
+          console.error("searchTickets error:", e);
+        }
+      },
+      async addToCart(eventId){
+        try{
+          const resp=await fetch('shopping_cart.php',{
+            method:'POST',
+            headers:{ 'Content-Type':'application/x-www-form-urlencoded'},
+            body:new URLSearchParams({
+              action:'add_to_cart',
+              event_id:eventId,
+              quantity:1
+            })
+          });
+          const j=await resp.json();
+          if(j.success){
+            alert("Item added to cart!");
+          } else {
+            alert(j.message||"Failed to add item to cart.");
+          }
+        }catch(e){
+          console.error(e);
+          alert("Error adding item to cart.");
+        }
+      },
+      showDetails(ev){
+        this.modalEvent=ev;
+        this.topSongs= ev.songs? ev.songs.split(','): [];
+        this.modalInterpreter = ev.artist_name || 'Unknown Artist';
+
+        let detailModal = new bootstrap.Modal(
+          document.getElementById('detailModal')
+        );
+        detailModal.show();
+      }
+    },
+    mounted(){
+      this.searchTickets();
+    }
+  });
+  searchApp.mount('#searchApp');
+</script>
+
+</body>
+</html>

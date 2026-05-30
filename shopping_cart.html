@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <meta charset="UTF-8">
+  <title>Shopping Cart</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+  <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
+
+  <style>
+    body {
+      background-color: #f2f2f2; 
+      margin: 0; 
+      padding: 0;
+    }
+    .main-container {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      margin: 40px auto;
+      max-width: 1200px;
+    }
+    h2 {
+      margin-bottom: 20px;
+      text-align: center;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .cart-card {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    .cart-card-body {
+      flex: 1;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .cart-card-footer {
+      padding: 1rem;
+      background-color: #f9f9f9;
+      border-top: 1px solid #ddd;
+      text-align: right;
+    }
+    .qty-input {
+      max-width:80px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="navApp">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="index.html">TicketShop</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="search_tickets.html">Browse Events</a></li>
+          <li class="nav-item">
+            <a class="nav-link active" aria-current="page" href="shopping_cart_div.html">Cart</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="order_history.html">My Orders</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="profile.html">Profile</a>
+          </li>
+          <li class="nav-item" v-if="isLoggedIn">
+            <a class="nav-link" href="#" @click.prevent="logout">Logout ({{ userName }})</a>
+          </li>
+          <li class="nav-item" v-else>
+            <a class="nav-link" href="login.html">Login/Register</a>
+          </li>
+          <li class="nav-item" v-if="isAdmin">
+            <a class="nav-link" href="admin_dashboard.html">Admin Dashboard</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<div id="cartApp" class="mt-5">
+  <div class="main-container">
+    <h2>Your Shopping Cart</h2>
+
+    <div v-if="cartItems.length===0" class="alert alert-warning text-center">
+      Your cart is empty. <a href="search_tickets.html">Browse events</a> to add tickets.
+    </div>
+
+    <div v-else>
+      <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 mb-4">
+        <div class="col" v-for="item in cartItems" :key="item.event.id">
+          <div class="cart-card">
+            <div class="cart-card-body">
+              <h5>{{ item.event.title }}</h5>
+              <small>
+                {{ new Date(item.event.date_time).toLocaleDateString() }} – 
+                {{ item.event.location }}
+              </small>
+              
+              <p class="mt-2 mb-1">
+                Price: ${{ parseFloat(item.event.price).toFixed(2) }}
+              </p>
+              <div class="d-flex align-items-center">
+                <label class="me-2">Qty:</label>
+                <input type="number"
+                  class="form-control qty-input"
+                  min="1"
+                  v-model.number="item.quantity"
+                  @change="updateQuantity(item.event.id, item.quantity)"
+                >
+              </div>
+              <div class="mt-3 fw-bold">
+                Subtotal: ${{ (item.event.price * item.quantity).toFixed(2) }}
+              </div>
+            </div>
+            <div class="cart-card-footer">
+              <button
+                class="btn btn-danger btn-sm"
+                @click="removeItem(item.event.id)"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end align-items-center">
+        <h4 class="me-3">
+          Total: ${{ cartTotal.toFixed(2) }}
+        </h4>
+        <button class="btn btn-success" @click="checkout">
+          Checkout
+        </button>
+      </div>
+
+      <div 
+        v-if="message"
+        class="alert mt-3"
+        :class="{'alert-success': success, 'alert-danger': !success}"
+      >
+        {{ message }}
+      </div>
+    </div>
+  </div>
+
+  <div 
+    class="modal fade"
+    id="loginModal"
+    tabindex="-1"
+    aria-labelledby="loginModalLabel"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loginModalLabel">Login Required</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label>Email</label>
+            <input 
+              type="email"
+              class="form-control"
+              v-model="loginForm.email"
+            >
+          </div>
+          <div class="mb-3">
+            <label>Password</label>
+            <input
+              type="password"
+              class="form-control"
+              v-model="loginForm.password"
+            >
+          </div>
+          <div v-if="loginMessage" class="alert mt-2" :class="{'alert-success': loginSuccess, 'alert-danger': !loginSuccess}">
+            {{ loginMessage }}
+          </div>
+          <div class="mt-3 text-center">
+            <a href="register.html">Nemáš účet? Registrovat se</a><br>
+            <a href="request_password_reset.html">Zapomenuté heslo?</a>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button 
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >Cancel</button>
+          <button 
+            type="button"
+            class="btn btn-primary"
+            @click="modalLogin"
+          >Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Payment Information</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label>Card Number</label>
+            <input 
+              type="text"
+              class="form-control"
+              v-model="paymentForm.cardNumber"
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              @input="checkPaymentInputs"
+            >
+          </div>
+          <div class="mb-3">
+            <label>Expiry (MM/YY)</label>
+            <input 
+              type="text"
+              class="form-control"
+              v-model="paymentForm.expiry"
+              placeholder="MM/YY"
+              @input="checkPaymentInputs"
+            >
+          </div>
+          <div class="mb-3">
+            <label>CVC</label>
+            <input 
+              type="text"
+              class="form-control"
+              v-model="paymentForm.cvc"
+              placeholder="123"
+              @input="checkPaymentInputs"
+            >
+          </div>
+          <div v-if="paymentErrorMsg" class="alert alert-danger">
+            {{ paymentErrorMsg }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button 
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >Cancel</button>
+          <button 
+            type="button"
+            class="btn btn-primary"
+            :disabled="paymentInvalid"
+            @click="finalCheckout"
+          >Pay Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script 
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+</script>
+
+<script>
+const navApp = Vue.createApp({
+  data(){
+    return {
+      isLoggedIn:false,
+      userName:"",
+      isAdmin:false
+    };
+  },
+  methods:{
+    async checkSession(){
+      try{
+        const resp=await fetch('session_check.php');
+        const j=await resp.json();
+        if(j.success){
+          this.isLoggedIn=true;
+          this.userName=j.data.name;
+          this.isAdmin=(j.data.role==='admin');
+        } else {
+          this.isLoggedIn=false;
+          this.isAdmin=false;
+        }
+      }catch(e){
+        console.error("checkSession error:",e);
+      }
+    },
+    async logout(){
+      try{
+        const resp=await fetch('logout.php');
+        const j=await resp.json();
+        if(j.success){
+          window.location.href='login.html';
+        }
+      }catch(e){
+        console.error("logout error:",e);
+      }
+    }
+  },
+  mounted(){
+    this.checkSession();
+  }
+});
+navApp.mount('#navApp');
+</script>
+
+<script>
+const cartApp = Vue.createApp({
+  data(){
+    return {
+      cartItems: [],
+      message:"",
+      success:false,
+
+      loginForm:{ email:"", password:"" },
+      loginMessage:"",
+      loginSuccess:false,
+
+      paymentForm:{ cardNumber:"", expiry:"", cvc:"" },
+      paymentErrorMsg:"",
+      paymentInvalid:true,
+
+      isLoggedIn:false
+    };
+  },
+  computed:{
+    cartTotal(){
+      return this.cartItems.reduce((sum,item)=>
+        sum+(item.event.price*item.quantity),0
+      );
+    }
+  },
+  methods:{
+    async checkSessionLocal(){
+      try{
+        const r=await fetch('session_check.php');
+        const j=await r.json();
+        if(j.success){
+          this.isLoggedIn=true;
+        } else {
+          this.isLoggedIn=false;
+        }
+      }catch(e){
+        console.error(e);
+      }
+    },
+    async fetchCart(){
+      try{
+        const resp=await fetch('shopping_cart.php?action=view_cart');
+        const data=await resp.json();
+        if(data.success){
+          this.cartItems=data.data; 
+        } else {
+          this.message=data.message;
+          this.success=false;
+        }
+      }catch(error){
+        console.error("Error fetching cart:",error);
+        this.message="Failed to load cart data.";
+        this.success=false;
+      }
+    },
+    async updateQuantity(eid,qty){
+      if(qty<1){
+        alert("Quantity must be >=1");
+        return;
+      }
+      try{
+        const resp=await fetch('shopping_cart.php',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams({
+            action:'update_quantity',
+            event_id:eid,
+            quantity:qty
+          })
+        });
+        const result=await resp.json();
+        if(!result.success){
+          alert(result.message||"Failed to update quantity.");
+        }else{
+          this.fetchCart();
+        }
+      }catch(e){
+        console.error("updateQuantity error:",e);
+      }
+    },
+    async removeItem(eid){
+      if(!confirm("Are you sure to remove this item?")) return;
+      try{
+        const resp=await fetch('shopping_cart.php',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams({
+            action:'remove_from_cart',
+            event_id:eid
+          })
+        });
+        const result=await resp.json();
+        if(result.success){
+          this.fetchCart();
+        }else{
+          this.message=result.message;
+          this.success=false;
+        }
+      }catch(e){
+        console.error("removeItem error:",e);
+      }
+    },
+    checkout(){
+      if(!this.isLoggedIn){
+        this.openLoginModal();
+      } else {
+        this.openPaymentModal();
+      }
+    },
+    openLoginModal(){
+      this.loginForm={ email:"", password:"" };
+      this.loginMessage="";
+      this.loginSuccess=false;
+      let loginM=new bootstrap.Modal(document.getElementById('loginModal'));
+      loginM.show();
+    },
+    async modalLogin(){
+      try{
+        const resp=await fetch('login.php',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams(this.loginForm)
+        });
+        const result=await resp.json();
+        this.loginSuccess=result.success;
+        this.loginMessage=result.message;
+        if(result.success){
+          let loginEl=document.getElementById('loginModal');
+          let loginObj=bootstrap.Modal.getInstance(loginEl);
+          loginObj.hide();
+
+          this.isLoggedIn=true;
+          this.fetchCart();
+          this.openPaymentModal();
+        }
+      }catch(e){
+        console.error("modalLogin error:",e);
+        this.loginSuccess=false;
+        this.loginMessage="Error logging in.";
+      }
+    },
+    openPaymentModal(){
+      this.paymentForm={ cardNumber:"", expiry:"", cvc:"" };
+      this.paymentErrorMsg="";
+      this.paymentInvalid=true;
+      let pm=new bootstrap.Modal(document.getElementById('paymentModal'));
+      pm.show();
+    },
+    checkPaymentInputs(){
+      let cardRegex=/^(\d{4}-?){3}\d{4}$/;
+      let expiryRegex=/^(0[1-9]|1[0-2])\/\d{2}$/;
+      let cvcRegex=/^\d{3}$/;
+
+      if(!cardRegex.test(this.paymentForm.cardNumber)){
+        this.paymentErrorMsg="Invalid card number (16 digits, can be in xxxx-xxxx-xxxx-xxxx format).";
+        this.paymentInvalid=true;
+        return;
+      }
+      if(!expiryRegex.test(this.paymentForm.expiry)){
+        this.paymentErrorMsg="Expiry must be MM/YY (01-12 for MM).";
+        this.paymentInvalid=true;
+        return;
+      }
+      if(!cvcRegex.test(this.paymentForm.cvc)){
+        this.paymentErrorMsg="CVC must be exactly 3 digits.";
+        this.paymentInvalid=true;
+        return;
+      }
+      this.paymentErrorMsg="";
+      this.paymentInvalid=false;
+    },
+    async finalCheckout(){
+      let pmEl=document.getElementById('paymentModal');
+      let pmObj=bootstrap.Modal.getInstance(pmEl);
+      pmObj.hide();
+      try{
+        const resp=await fetch('shopping_cart.php',{
+          method:'POST',
+          headers:{'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams({ action:'checkout' })
+        });
+        const result=await resp.json();
+        if(result.success){
+          this.cartItems=[];
+          this.message="Payment successful! "+result.message;
+          this.success=true;
+        } else {
+          this.message=result.message;
+          this.success=false;
+        }
+      }catch(e){
+        console.error("Error finalCheckout:",e);
+        this.message="Error during checkout.";
+        this.success=false;
+      }
+    }
+  },
+  async mounted(){
+    await this.checkSessionLocal();
+    this.fetchCart();
+  }
+});
+cartApp.mount('#cartApp');
+</script>
+
+</body>
+</html>
